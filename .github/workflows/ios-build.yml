@@ -28,29 +28,37 @@ jobs:
       - name: Generate iOS project
         run: npx expo prebuild --platform ios --no-install
 
-      - name: Inspect iOS project
+      - name: Install CocoaPods
         run: |
-          echo "=== iOS directory ==="
+          cd ios
+          pod install
+
+      - name: Show Xcode project
+        run: |
           ls -la ios
-
-          echo "=== Workspaces ==="
           find ios -maxdepth 1 -name "*.xcworkspace" -print
-
-          echo "=== Projects ==="
           find ios -maxdepth 1 -name "*.xcodeproj" -print
 
-      - name: Show Xcode schemes
+      - name: Build iOS app
         run: |
-          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -print -quit)
-          PROJECT=$(find ios -maxdepth 1 -name "*.xcodeproj" -print -quit)
+          xcodebuild \
+            -workspace ios/BasaMessenger.xcworkspace \
+            -scheme "BasaMessenger" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
 
-          if [ -n "$WORKSPACE" ]; then
-            echo "Using workspace: $WORKSPACE"
-            xcodebuild -workspace "$WORKSPACE" -list
-          elif [ -n "$PROJECT" ]; then
-            echo "Using project: $PROJECT"
-            xcodebuild -project "$PROJECT" -list
-          else
-            echo "ERROR: No Xcode workspace or project found"
-            exit 1
-          fi
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/BasaMessenger.app Payload/BasaMessenger.app
+          zip -r Basa-Messenger-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Basa-Messenger-IPA
+          path: Basa-Messenger-unsigned.ipa
