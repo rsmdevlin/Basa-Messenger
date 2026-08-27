@@ -7,6 +7,10 @@ jobs:
   build:
     runs-on: macos-latest
 
+    defaults:
+      run:
+        working-directory: artifacts/test-app
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,6 +24,7 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 11.24.0
+          run_install: false
 
       - name: Check versions
         run: |
