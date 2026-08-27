@@ -1,4 +1,4 @@
-name: iOS Build
+﻿name: iOS Build
 
 on:
   workflow_dispatch:
@@ -22,22 +22,35 @@ jobs:
           version: 11.24.0
           run_install: false
 
-      - name: Check versions
-        run: |
-          node --version
-          pnpm --version
-          npm --version
-
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --no-install
 
-      - name: Check EAS
-        run: eas --version
+      - name: Inspect iOS project
+        run: |
+          echo "=== iOS directory ==="
+          ls -la ios
 
-      - name: Build iOS
-        run: eas build --platform ios --profile preview --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          echo "=== Workspaces ==="
+          find ios -maxdepth 1 -name "*.xcworkspace" -print
+
+          echo "=== Projects ==="
+          find ios -maxdepth 1 -name "*.xcodeproj" -print
+
+      - name: Show Xcode schemes
+        run: |
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -print -quit)
+          PROJECT=$(find ios -maxdepth 1 -name "*.xcodeproj" -print -quit)
+
+          if [ -n "$WORKSPACE" ]; then
+            echo "Using workspace: $WORKSPACE"
+            xcodebuild -workspace "$WORKSPACE" -list
+          elif [ -n "$PROJECT" ]; then
+            echo "Using project: $PROJECT"
+            xcodebuild -project "$PROJECT" -list
+          else
+            echo "ERROR: No Xcode workspace or project found"
+            exit 1
+          fi
