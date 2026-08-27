@@ -1,0 +1,25 @@
+import React from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColors } from '@/hooks/useColors';
+import { useMessenger } from '@/context/MessengerContext';
+import { SettingsRow } from '@/components/SettingsRow';
+
+export default function SettingsScreen() {
+  const colors = useColors(); const insets = useSafeAreaInsets(); const { settings, updateSettings, clearCache } = useMessenger();
+  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => <View style={styles.section}><Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{title}</Text><View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{children}</View></View>;
+  return <ScrollView style={[styles.page, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingTop: (Platform.OS === 'web' ? 67 : insets.top) + 12, paddingHorizontal: 20, paddingBottom: insets.bottom + 30 }}>
+    <View style={styles.top}><Pressable testID="settings-back" onPress={() => router.back()} hitSlop={12}><Feather name="chevron-left" size={27} color={colors.foreground} /></Pressable><Text style={[styles.title, { color: colors.foreground }]}>Settings</Text><View style={{ width: 27 }} /></View>
+    <Section title="ACCOUNT"><SettingsRow icon="user" label="Profile" detail="Mara Ellison · @mara" onPress={() => router.push('/profile/edit')} /><SettingsRow icon="shield" label="Privacy" detail="Private by default" onPress={() => updateSettings({ readReceipts: !settings.readReceipts })} /></Section>
+    <Section title="APPEARANCE"><SettingsRow icon="moon" label="Theme mode" detail={`${settings.themeMode.charAt(0).toUpperCase()}${settings.themeMode.slice(1)} · designed for low light`} onPress={() => updateSettings({ themeMode: settings.themeMode === 'dark' ? 'system' : settings.themeMode === 'system' ? 'light' : 'dark' })} /><SettingsRow icon="circle" label="Accent" detail={settings.accent === 'coral' ? 'Warm coral' : 'Soft lavender'} onPress={() => updateSettings({ accent: settings.accent === 'coral' ? 'lavender' : 'coral' })} /><SettingsRow icon="sliders" label="Message style" detail={settings.messageStyle === 'soft' ? 'Soft bubbles' : 'Compact'} onPress={() => updateSettings({ messageStyle: settings.messageStyle === 'soft' ? 'compact' : 'soft' })} /><SettingsRow icon="zap" label="Animations" value={settings.animations} onValueChange={(value) => updateSettings({ animations: value })} /></Section>
+    <Section title="NOTIFICATIONS"><SettingsRow icon="bell" label="Notifications" value={settings.notifications} onValueChange={(value) => updateSettings({ notifications: value })} /><SettingsRow icon="eye" label="Message previews" value={settings.previews} onValueChange={(value) => updateSettings({ previews: value })} /></Section>
+    <Section title="PRIVACY"><SettingsRow icon="check-circle" label="Read receipts" value={settings.readReceipts} onValueChange={(value) => updateSettings({ readReceipts: value })} /><SettingsRow icon="edit-3" label="Typing indicators" value={settings.typingIndicators} onValueChange={(value) => updateSettings({ typingIndicators: value })} /></Section>
+    <Section title="CHAT"><SettingsRow icon="corner-down-left" label="Enter to send" value={settings.enterToSend} onValueChange={(value) => updateSettings({ enterToSend: value })} /><SettingsRow icon="download" label="Auto-download media" value={settings.autoDownload} onValueChange={(value) => updateSettings({ autoDownload: value })} /></Section>
+    <Section title="STORAGE"><SettingsRow icon="trash-2" label="Clear local cache" detail="Demo data can be restored" destructive onPress={() => Alert.alert('Clear local cache?', 'Your local changes will be removed and the demo will be restored.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => void clearCache() }])} /></Section>
+    <Section title="SECURITY"><SettingsRow icon="lock" label="App lock" detail="Not enabled" value={settings.lockApp} onValueChange={(value) => updateSettings({ lockApp: value })} /></Section>
+    <Section title="ABOUT"><SettingsRow icon="heart" label="Basa Messenger" detail="A calm place to stay close" /><SettingsRow icon="info" label="Version" detail="0.8.0 · Local preview" /></Section>
+  </ScrollView>;
+}
+const styles = StyleSheet.create({ page: { flex: 1 }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 17 }, title: { fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.4 }, section: { marginBottom: 19 }, sectionTitle: { fontFamily: 'Inter_700Bold', letterSpacing: 1.7, fontSize: 10, marginLeft: 5, marginBottom: 8 }, card: { borderWidth: 1, borderRadius: 21, paddingHorizontal: 15, paddingVertical: 3 } });

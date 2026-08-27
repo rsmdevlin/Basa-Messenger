@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "Test App",
-    "slug": "test-app",
+    "name": "Basa Messenger",
+    "slug": "basa-messenger",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "test-app",
+    "scheme": "basa",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#080A12"
+      "backgroundColor": "#10121C"
     },
     "ios": {
       "supportsTablet": false

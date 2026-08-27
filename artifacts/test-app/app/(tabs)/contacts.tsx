@@ -1,0 +1,18 @@
+import React, { useMemo, useState } from 'react';
+import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColors } from '@/hooks/useColors';
+import { useMessenger } from '@/context/MessengerContext';
+import { Avatar } from '@/components/Avatar';
+import { EmptyState } from '@/components/EmptyState';
+
+export default function ContactsScreen() {
+  const colors = useColors(); const insets = useSafeAreaInsets(); const { users } = useMessenger(); const [query, setQuery] = useState('');
+  const contacts = useMemo(() => users.filter((user) => user.id !== 'me' && `${user.displayName} ${user.username}`.toLowerCase().includes(query.toLowerCase())), [users, query]);
+  return <View style={[styles.page, { backgroundColor: colors.background }]}>
+    <FlatList data={contacts} keyExtractor={(item) => item.id} contentContainerStyle={{ paddingTop: (Platform.OS === 'web' ? 67 : insets.top) + 18, paddingHorizontal: 20, paddingBottom: insets.bottom + 100 }} renderItem={({ item }) => <Pressable testID={`contact-${item.id}`} onPress={() => router.push(`/chat/${item.id}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}><Avatar name={item.displayName} tone={item.avatarTone} size={49} online={item.online} /><View style={styles.copy}><Text style={[styles.name, { color: colors.foreground }]}>{item.displayName}</Text><Text style={[styles.sub, { color: colors.mutedForeground }]}>@{item.username} <Text style={{ color: item.online ? colors.success : colors.mutedForeground }}>· {item.online ? 'online' : 'offline'}</Text></Text></View><Pressable testID={`start-chat-${item.id}`} onPress={() => router.push(`/chat/${item.id}`)} style={[styles.chatButton, { backgroundColor: colors.softLavender }]}><Feather name="message-circle" size={18} color={colors.accent} /></Pressable></Pressable>} ListHeaderComponent={<View><Text style={[styles.kicker, { color: colors.accent }]}>YOUR PEOPLE</Text><Text style={[styles.title, { color: colors.foreground }]}>Contacts</Text><View style={[styles.search, { backgroundColor: colors.card, borderColor: colors.border }]}><Feather name="search" size={18} color={colors.mutedForeground} /><TextInput testID="contacts-search" value={query} onChangeText={setQuery} placeholder="Find someone" placeholderTextColor={colors.mutedForeground} style={[styles.searchInput, { color: colors.foreground }]} /></View><Text style={[styles.count, { color: colors.mutedForeground }]}>{contacts.length} people</Text></View>} ListEmptyComponent={<EmptyState title="No one by that name" detail="Try a username or a softer spelling." icon="users" />} />
+  </View>;
+}
+const styles = StyleSheet.create({ page: { flex: 1 }, kicker: { fontFamily: 'Inter_700Bold', letterSpacing: 2.4, fontSize: 11, marginBottom: 7 }, title: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -1, marginBottom: 22 }, search: { height: 48, borderWidth: 1, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 10 }, searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14 }, count: { fontFamily: 'Inter_500Medium', fontSize: 12, marginTop: 21, marginBottom: 5 }, row: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 12 }, pressed: { opacity: 0.65 }, copy: { flex: 1, gap: 5 }, name: { fontFamily: 'Inter_600SemiBold', fontSize: 16 }, sub: { fontFamily: 'Inter_400Regular', fontSize: 12 }, chatButton: { width: 38, height: 38, borderRadius: 14, alignItems: 'center', justifyContent: 'center' } });

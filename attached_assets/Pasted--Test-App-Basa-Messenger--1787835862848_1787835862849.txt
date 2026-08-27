@@ -1,0 +1,248 @@
+Отлично. Теперь начинай превращать текущий Test App в Basa Messenger.
+
+НЕ делай пока настоящую авторизацию, realtime и админ-панель.
+Сначала полностью реализуй мобильную часть приложения и UX.
+
+ЗАДАЧА ЭТОГО ЭТАПА:
+
+1. Удали тестовый экран со счётчиком.
+
+2. Создай полноценный главный экран Basa Messenger.
+
+Нижняя навигация:
+- Chats
+- Contacts
+- Profile
+
+3. CHATS
+
+Сделай красивый список тестовых чатов.
+
+Каждый чат:
+- avatar;
+- имя;
+- username;
+- последнее сообщение;
+- время;
+- unread badge;
+- online indicator;
+- закрепление.
+
+Добавь:
+- поиск;
+- pull-to-refresh;
+- swipe actions;
+- pinned chats;
+- archived chats;
+- empty state.
+
+4. CHAT
+
+При открытии чата показывай полноценный интерфейс переписки.
+
+Сделай:
+- сообщения;
+- свои/чужие message bubbles;
+- timestamps;
+- read status;
+- reactions;
+- reply;
+- long press menu;
+- copy;
+- edit;
+- delete;
+- forward;
+- unread separator;
+- date separators.
+
+Поле ввода:
+- multiline;
+- send button;
+- emoji button;
+- attachment button;
+- voice-message UI placeholder.
+
+При отправке сообщения оно должно мгновенно появляться в чате.
+
+5. CONTACTS
+
+Создай экран контактов:
+- поиск;
+- список пользователей;
+- avatar;
+- username;
+- online status;
+- открыть профиль;
+- начать чат.
+
+6. PROFILE
+
+Сделай красивый профиль:
+- avatar;
+- имя;
+- username;
+- bio;
+- online status;
+- edit profile;
+- settings.
+
+7. SETTINGS
+
+Сделай полноценный iOS-style Settings screen.
+
+Разделы:
+
+Account
+- Edit profile
+- Username
+- Sessions
+
+Appearance
+- Light
+- Dark
+- System
+- Accent color
+- Message style
+- Animations
+
+Notifications
+- Messages
+- Groups
+- Sound
+- Vibration
+- Preview
+
+Privacy
+- Last seen
+- Online status
+- Read receipts
+- Typing status
+- Blocked users
+
+Chat
+- Enter to send
+- Auto-download media
+- Autoplay videos
+- Save media
+
+Storage
+- Cache
+- Clear cache
+
+Security
+- Passcode Lock
+- Face ID placeholder
+- Active sessions
+
+About
+- Version
+- Support
+- Privacy Policy
+- Terms
+
+8. ANIMATIONS
+
+Сделай приложение очень плавным.
+
+Добавь:
+- screen transitions;
+- chat opening animation;
+- message appearing animation;
+- button press feedback;
+- modal animations;
+- bottom sheet animations;
+- skeleton loading;
+- pull-to-refresh animation.
+
+Используй нативные/Expo-compatible animation APIs.
+
+9. iOS UX
+
+Особое внимание:
+- Safe Area;
+- keyboard avoiding;
+- iOS navigation;
+- swipe back;
+- haptic feedback;
+- Dynamic Island safe area;
+- разные размеры iPhone;
+- dark mode.
+
+10. DESIGN
+
+Создай собственную дизайн-систему Basa Messenger.
+
+Не копируй Telegram/WhatsApp.
+
+Интерфейс должен выглядеть дорого, современно и минималистично.
+
+Используй:
+- аккуратную типографику;
+- хорошие spacing;
+- красивые cards;
+- плавные transitions;
+- subtle blur где уместно;
+- consistent icons.
+
+11. ARCHITECTURE
+
+Не складывай всё в один файл.
+
+Используй:
+
+app/
+components/
+features/
+services/
+hooks/
+contexts/
+types/
+utils/
+constants/
+
+Создай отдельные компоненты для:
+- ChatRow
+- MessageBubble
+- Avatar
+- ConversationHeader
+- MessageInput
+- SettingsRow
+- ProfileHeader
+
+12. DATA LAYER
+
+Пока используй demo repository/local storage.
+
+Но создай абстракцию:
+
+ChatRepository
+MessageRepository
+UserRepository
+SettingsRepository
+
+Чтобы позже можно было заменить local storage на настоящий backend без переписывания UI.
+
+13. DATA PERSISTENCE
+
+Тестовые сообщения и настройки должны сохраняться локально после перезапуска приложения.
+
+14. QUALITY
+
+После реализации:
+- запусти TypeScript check;
+- исправь ошибки;
+- проверь Expo;
+- проверь navigation;
+- проверь все экраны;
+- проверь keyboard behavior;
+- не оставляй broken imports;
+- не удаляй нужные зависимости.
+
+В конце дай мне список:
+1. Какие файлы созданы.
+2. Какие файлы изменены.
+3. Какие функции работают.
+4. Что осталось для следующего этапа.
+
+Не переходи к backend/database пока.
+Сначала сделай этот мобильный UI полностью рабочим.

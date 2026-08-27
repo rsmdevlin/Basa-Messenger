@@ -13,6 +13,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { MessengerProvider } from '@/context/MessengerContext';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -21,8 +22,12 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: 'Назад' }}>
+      <Stack screenOptions={{ headerBackTitle: 'Back', headerTintColor: '#F7F3F0', headerStyle: { backgroundColor: '#10121C' }, headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'card' }} />
+      <Stack.Screen name="profile/edit" options={{ headerShown: false, presentation: 'modal' }} />
     </Stack>
   );
 }
@@ -49,7 +54,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
-              <RootLayoutNav />
+              <MessengerProvider><RootLayoutNav /></MessengerProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
