@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "Basa Messenger"
+description = "An iOS-first Expo messenger app that preserves the existing Test-App foundation while providing a polished path toward chats, profiles, groups, realtime messaging, notifications, and secure account settings."
+version = "1.0.0"
+id = "artifacts/test-app"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 20505
+
+[services.development]
+run = "pnpm --filter @workspace/test-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/test-app", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/test-app", "run", "serve" ]
+
+[services.env]
+PORT = "20505"
+BASE_PATH = "/"
