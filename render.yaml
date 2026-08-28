@@ -3,7 +3,7 @@ services:
     name: basa-messenger-api
     runtime: node
     plan: free
-    buildCommand: cd artifacts/api-server && npm run build
+    buildCommand: pnpm install && cd artifacts/api-server && pnpm run build
     startCommand: cd artifacts/api-server && NODE_ENV=production node --enable-source-maps ./dist/index.mjs
     envVars:
       - key: NODE_ENV
