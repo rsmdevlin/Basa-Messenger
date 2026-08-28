@@ -14,6 +14,7 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { MessengerProvider } from '@/context/MessengerContext';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -21,13 +22,28 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const { isSignedIn, isLoading } = useAuth();
+
+  if (isLoading) {
+    return null;
+  }
+
   return (
-      <Stack screenOptions={{ headerBackTitle: 'Back', headerTintColor: '#F7F3F0', headerStyle: { backgroundColor: '#10121C' }, headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'card' }} />
-      <Stack.Screen name="profile/edit" options={{ headerShown: false, presentation: 'modal' }} />
+    <Stack screenOptions={{ headerBackTitle: 'Back', headerTintColor: '#F7F3F0', headerStyle: { backgroundColor: '#10121C' }, headerTitleStyle: { fontFamily: 'Inter_600SemiBold' } }}>
+      {isSignedIn ? (
+        <>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'card' }} />
+          <Stack.Screen name="profile/edit" options={{ headerShown: false, presentation: 'modal' }} />
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
+        </>
+      )}
     </Stack>
   );
 }
@@ -54,7 +70,11 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
-              <MessengerProvider><RootLayoutNav /></MessengerProvider>
+              <AuthProvider>
+                <MessengerProvider>
+                  <RootLayoutNav />
+                </MessengerProvider>
+              </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
