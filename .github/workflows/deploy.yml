@@ -1,0 +1,24 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Trigger Render Deploy
+        run: |
+          curl --request POST \
+            --url "https://api.render.com/deploy/srv/${{ secrets.RENDER_SERVICE_ID }}?key=${{ secrets.RENDER_API_KEY }}" \
+            --header 'content-type: application/json'
+
+      - name: Wait for deployment
+        run: sleep 10
+
+      - name: Health check
+        run: |
+          curl -f https://${{ secrets.RENDER_SERVICE_URL }}/health || exit 1

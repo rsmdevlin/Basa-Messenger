@@ -6,6 +6,14 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// CORS конфигурация для production
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || "*",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
 app.use(
   pinoHttp({
     logger,
@@ -25,10 +33,15 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// Health check endpoint для хостинга
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 export default app;
