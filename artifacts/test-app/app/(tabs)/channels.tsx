@@ -40,7 +40,7 @@ export default function ChannelsScreen() {
 
   const loadChannels = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/channels', {
+      const res = await fetch('https://basa-messenger.onrender.com/api/channels', {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load channels');

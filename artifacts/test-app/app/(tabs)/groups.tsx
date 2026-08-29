@@ -38,7 +38,7 @@ export default function GroupsScreen() {
 
   const loadGroups = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/groups', {
+      const res = await fetch('https://basa-messenger.onrender.com/api/groups', {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load groups');

@@ -28,7 +28,7 @@ export default function CreateGroupScreen() {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/groups', {
+      const res = await fetch('https://basa-messenger.onrender.com/api/groups', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

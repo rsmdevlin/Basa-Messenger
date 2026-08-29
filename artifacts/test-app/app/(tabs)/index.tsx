@@ -46,7 +46,7 @@ export default function ChatsScreen() {
   const loadChats = async () => {
     try {
       if (!token) return;
-      const res = await fetch('http://localhost:5000/api/chats', {
+      const res = await fetch('https://basa-messenger.onrender.com/api/chats', {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();

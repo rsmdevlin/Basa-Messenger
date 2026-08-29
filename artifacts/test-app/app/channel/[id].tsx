@@ -41,7 +41,7 @@ export default function ChannelDetailScreen() {
 
   const loadChannelInfo = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/channels/${id}`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/channels/${id}`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load channel');
@@ -54,7 +54,7 @@ export default function ChannelDetailScreen() {
 
   const loadChannelPosts = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/channels/${id}/posts`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/channels/${id}/posts`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load posts');
@@ -74,7 +74,7 @@ export default function ChannelDetailScreen() {
     setPostText('');
 
     try {
-      const res = await fetch(`http://localhost:5000/api/channels/${id}/posts`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/channels/${id}/posts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -29,7 +29,7 @@ export default function CreateChannelScreen() {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/channels', {
+      const res = await fetch('https://basa-messenger.onrender.com/api/channels', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -40,7 +40,7 @@ export default function ChatScreen() {
 
   const loadMessages = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/chats/${id}/messages`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/chats/${id}/messages`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load messages');
@@ -55,7 +55,7 @@ export default function ChatScreen() {
 
   const loadUserInfo = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${id}`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/users/${id}`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load user');
@@ -73,7 +73,7 @@ export default function ChatScreen() {
     setMessageText('');
 
     try {
-      const res = await fetch(`http://localhost:5000/api/chats/${id}/messages`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/chats/${id}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

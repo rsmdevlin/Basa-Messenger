@@ -40,7 +40,7 @@ export default function GroupDetailScreen() {
 
   const loadGroupInfo = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/groups/${id}`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/groups/${id}`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load group');
@@ -53,7 +53,7 @@ export default function GroupDetailScreen() {
 
   const loadGroupMessages = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/groups/${id}/messages`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/groups/${id}/messages`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
       if (!res.ok) throw new Error('Failed to load messages');
@@ -73,7 +73,7 @@ export default function GroupDetailScreen() {
     setMessageText('');
 
     try {
-      const res = await fetch(`http://localhost:5000/api/groups/${id}/messages`, {
+      const res = await fetch(`https://basa-messenger.onrender.com/api/groups/${id}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
