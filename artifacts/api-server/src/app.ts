@@ -42,6 +42,11 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString(), routes: "mounted" });
 });
 
+// Test endpoint to verify routing works
+app.get("/api/test", (req, res) => {
+  res.json({ message: "API routing works", timestamp: new Date().toISOString() });
+});
+
 app.use("/api", router);
 
 // Initialize database connection
