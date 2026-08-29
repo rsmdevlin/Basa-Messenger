@@ -38,12 +38,11 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
-
-// Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ status: "ok", timestamp: new Date().toISOString(), routes: "mounted" });
 });
+
+app.use("/api", router);
 
 // Initialize database connection
 export async function initializeApp() {
