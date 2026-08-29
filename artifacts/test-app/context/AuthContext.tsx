@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-const API_URL = 'https://basa-messenger.onrender.com/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 interface AuthUser {
   id: string;
