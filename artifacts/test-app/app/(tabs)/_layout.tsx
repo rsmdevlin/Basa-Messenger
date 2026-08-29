@@ -82,6 +82,7 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen name="contacts" options={{ title: 'People', tabBarIcon: ({ color }) => isIOS ? <SymbolView name="person.2" tintColor={color} size={23} /> : <Feather name="users" size={21} color={color} /> }} />
+      <Tabs.Screen name="admin" options={{ title: 'Admin', tabBarIcon: ({ color }) => isIOS ? <SymbolView name="shield.fill" tintColor={color} size={24} /> : <Feather name="shield" size={21} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => isIOS ? <SymbolView name="person.crop.circle" tintColor={color} size={24} /> : <Feather name="user" size={21} color={color} /> }} />
     </Tabs>
   );

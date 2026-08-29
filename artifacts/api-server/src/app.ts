@@ -3,10 +3,11 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { verifyConnection } from "@workspace/db";
 
 const app: Express = express();
 
-// CORS конфигурация для production
+// CORS конфигурация
 const corsOptions = {
   origin: process.env.CORS_ORIGIN || "*",
   credentials: true,
@@ -39,9 +40,25 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
-// Health check endpoint для хостинга
+// Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Initialize database connection
+export async function initializeApp() {
+  try {
+    const connected = await verifyConnection();
+    if (!connected) {
+      logger.error("Failed to connect to database");
+      process.exit(1);
+    }
+    logger.info("✅ Database initialized successfully");
+  } catch (error) {
+    logger.error(error, "Failed to initialize app");
+    process.exit(1);
+  }
+}
+
 export default app;
+

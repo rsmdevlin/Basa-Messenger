@@ -3,28 +3,16 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "../lib/logger";
+import { db, users, refreshTokens } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "90d";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "15m";
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "7d";
 
-// Mock database (будет заменена на реальную БД)
-interface User {
-  id: string;
-  email: string;
-  username: string;
-  passwordHash: string;
-  displayName: string | null;
-  avatar: string | null;
-  createdAt: Date;
-}
-
-const users: Map<string, User> = new Map();
-const refreshTokens: Map<string, string> = new Map();
-
-function userResponse(user: User) {
+function userResponse(user: any) {
   const { passwordHash, ...rest } = user;
   return rest;
 }
@@ -42,28 +30,44 @@ router.post("/register", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Password must be at least 8 characters" });
     }
 
-    const existingUser = Array.from(users.values()).find(
-      (u) => u.email === email || u.username === username
-    );
+    // Check if user exists
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
 
-    if (existingUser) {
-      return res.status(409).json({ message: "Email or username already exists" });
+    if (existingUser.length > 0) {
+      return res.status(409).json({ message: "Email already exists" });
+    }
+
+    const existingUsername = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username))
+      .limit(1);
+
+    if (existingUsername.length > 0) {
+      return res.status(409).json({ message: "Username already exists" });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = uuidv4();
 
-    const newUser: User = {
+    const newUser = {
       id: userId,
       email,
       username,
-      passwordHash,
       displayName: displayName || null,
+      passwordHash,
       avatar: null,
-      createdAt: new Date(),
+      bio: null,
+      status: "offline",
+      lastSeen: null,
+      isBlocked: false,
     };
 
-    users.set(userId, newUser);
+    await db.insert(users).values(newUser);
 
     const accessToken = jwt.sign({ userId, email }, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN,
@@ -73,7 +77,15 @@ router.post("/register", async (req: Request, res: Response) => {
       expiresIn: JWT_REFRESH_EXPIRES_IN,
     });
 
-    refreshTokens.set(userId, refreshToken);
+    const refreshTokenExpiry = new Date();
+    refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
+
+    await db.insert(refreshTokens).values({
+      id: uuidv4(),
+      userId,
+      token: refreshToken,
+      expiresAt: refreshTokenExpiry,
+    });
 
     logger.info(`User registered: ${email}`);
 
@@ -82,7 +94,7 @@ router.post("/register", async (req: Request, res: Response) => {
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: 30 * 24 * 60 * 60, // 30 days
+        expiresIn: 15 * 60, // 15 minutes in seconds
       },
     });
   } catch (err: any) {
@@ -100,12 +112,13 @@ router.post("/login", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Missing email or password" });
     }
 
-    const user = Array.from(users.values()).find((u) => u.email === email);
+    const userResult = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
-    if (!user) {
+    if (userResult.length === 0) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
+    const user = userResult[0];
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
 
     if (!passwordMatch) {
@@ -120,7 +133,15 @@ router.post("/login", async (req: Request, res: Response) => {
       expiresIn: JWT_REFRESH_EXPIRES_IN,
     });
 
-    refreshTokens.set(user.id, refreshToken);
+    const refreshTokenExpiry = new Date();
+    refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
+
+    await db.insert(refreshTokens).values({
+      id: uuidv4(),
+      userId: user.id,
+      token: refreshToken,
+      expiresAt: refreshTokenExpiry,
+    });
 
     logger.info(`User logged in: ${email}`);
 
@@ -129,7 +150,7 @@ router.post("/login", async (req: Request, res: Response) => {
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: 30 * 24 * 60 * 60,
+        expiresIn: 15 * 60,
       },
     });
   } catch (err: any) {
@@ -139,7 +160,7 @@ router.post("/login", async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/refresh
-router.post("/refresh", (req: Request, res: Response) => {
+router.post("/refresh", async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.body;
 
@@ -147,15 +168,23 @@ router.post("/refresh", (req: Request, res: Response) => {
       return res.status(400).json({ message: "Missing refresh token" });
     }
 
-    const decoded = jwt.verify(refreshToken, JWT_SECRET) as {
-      userId: string;
-      email: string;
-    };
-    const user = users.get(decoded.userId);
+    let decoded: any;
+    try {
+      decoded = jwt.verify(refreshToken, JWT_SECRET) as {
+        userId: string;
+        email: string;
+      };
+    } catch (err) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
 
-    if (!user) {
+    const userResult = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
+
+    if (userResult.length === 0) {
       return res.status(401).json({ message: "User not found" });
     }
+
+    const user = userResult[0];
 
     const newAccessToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN,
@@ -165,13 +194,21 @@ router.post("/refresh", (req: Request, res: Response) => {
       expiresIn: JWT_REFRESH_EXPIRES_IN,
     });
 
-    refreshTokens.set(user.id, newRefreshToken);
+    const refreshTokenExpiry = new Date();
+    refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
+
+    await db.insert(refreshTokens).values({
+      id: uuidv4(),
+      userId: user.id,
+      token: newRefreshToken,
+      expiresAt: refreshTokenExpiry,
+    });
 
     res.json({
       tokens: {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
-        expiresIn: 30 * 24 * 60 * 60,
+        expiresIn: 15 * 60,
       },
     });
   } catch (err: any) {
@@ -181,7 +218,7 @@ router.post("/refresh", (req: Request, res: Response) => {
 });
 
 // GET /api/auth/me
-router.get("/me", (req: Request, res: Response) => {
+router.get("/me", async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader?.split(" ")[1];
@@ -190,14 +227,20 @@ router.get("/me", (req: Request, res: Response) => {
       return res.status(401).json({ message: "Missing authorization token" });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    const user = users.get(decoded.userId);
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    } catch (err) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
 
-    if (!user) {
+    const userResult = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
+
+    if (userResult.length === 0) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json({ user: userResponse(user) });
+    res.json({ user: userResponse(userResult[0]) });
   } catch (err: any) {
     logger.error(err, "Auth me error");
     res.status(401).json({ message: "Unauthorized" });
@@ -205,14 +248,20 @@ router.get("/me", (req: Request, res: Response) => {
 });
 
 // POST /api/auth/logout
-router.post("/logout", (req: Request, res: Response) => {
+router.post("/logout", async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader?.split(" ")[1];
 
     if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-      refreshTokens.delete(decoded.userId);
+      let decoded: any;
+      try {
+        decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+        // Optional: delete refresh tokens for this user
+        // await db.delete(refreshTokens).where(eq(refreshTokens.userId, decoded.userId));
+      } catch (err) {
+        // Token is already invalid
+      }
     }
 
     res.json({ message: "Logged out successfully" });
