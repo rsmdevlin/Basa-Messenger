@@ -3,8 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "../lib/logger";
-import { db, users, refreshTokens } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { query, queryOne, execute } from "../lib/db";
 
 const router = Router();
 
@@ -12,8 +11,23 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-producti
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "15m";
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || "7d";
 
-function userResponse(user: any) {
-  const { passwordHash, ...rest } = user;
+interface User {
+  id: bigint;
+  username: string;
+  email: string;
+  password_hash: string;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  status: string | null;
+  avatar_tone: string | null;
+  is_admin: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function userResponse(user: Partial<User>) {
+  const { password_hash, ...rest } = user;
   return rest;
 }
 
@@ -31,61 +45,62 @@ router.post("/register", async (req: Request, res: Response) => {
     }
 
     // Check if user exists
-    const existingUser = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
+    const existingUser = await queryOne<User>(
+      "SELECT * FROM users WHERE email = ?",
+      [email]
+    );
 
-    if (existingUser.length > 0) {
+    if (existingUser) {
       return res.status(409).json({ message: "Email already exists" });
     }
 
-    const existingUsername = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username))
-      .limit(1);
+    const existingUsername = await queryOne<User>(
+      "SELECT * FROM users WHERE username = ?",
+      [username]
+    );
 
-    if (existingUsername.length > 0) {
+    if (existingUsername) {
       return res.status(409).json({ message: "Username already exists" });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const userId = uuidv4();
+    const userId = BigInt(Date.now()); // Use timestamp for ID
+
+    await execute(
+      "INSERT INTO users (id, email, username, display_name, password_hash, status, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [userId, email, username, displayName || null, passwordHash, "offline", false]
+    );
 
     const newUser = {
       id: userId,
       email,
       username,
-      displayName: displayName || null,
-      passwordHash,
-      avatar: null,
+      display_name: displayName || null,
+      password_hash: passwordHash,
+      avatar_url: null,
       bio: null,
       status: "offline",
-      lastSeen: null,
-      isBlocked: false,
+      avatar_tone: null,
+      is_admin: false,
+      created_at: new Date(),
+      updated_at: new Date(),
     };
 
-    await db.insert(users).values(newUser);
-
-    const accessToken = jwt.sign({ userId, email }, JWT_SECRET, {
+    const accessToken = jwt.sign({ userId: userId.toString(), email }, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN,
     });
 
-    const refreshToken = jwt.sign({ userId, email }, JWT_SECRET, {
+    const refreshToken = jwt.sign({ userId: userId.toString(), email }, JWT_SECRET, {
       expiresIn: JWT_REFRESH_EXPIRES_IN,
     });
 
     const refreshTokenExpiry = new Date();
     refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
 
-    await db.insert(refreshTokens).values({
-      id: uuidv4(),
-      userId,
-      token: refreshToken,
-      expiresAt: refreshTokenExpiry,
-    });
+    await execute(
+      "INSERT INTO sessions (user_id, token, refresh_token, expires_at, refresh_expires_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [userId, accessToken, refreshToken, refreshTokenExpiry, refreshTokenExpiry, new Date()]
+    );
 
     logger.info(`User registered: ${email}`);
 
@@ -94,7 +109,7 @@ router.post("/register", async (req: Request, res: Response) => {
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: 15 * 60, // 15 minutes in seconds
+        expiresIn: 15 * 60,
       },
     });
   } catch (err: any) {
@@ -112,36 +127,36 @@ router.post("/login", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Missing email or password" });
     }
 
-    const userResult = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const user = await queryOne<User>(
+      "SELECT * FROM users WHERE email = ?",
+      [email]
+    );
 
-    if (userResult.length === 0) {
+    if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const user = userResult[0];
-    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const accessToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, {
+    const accessToken = jwt.sign({ userId: user.id.toString(), email: user.email }, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN,
     });
 
-    const refreshToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, {
+    const refreshToken = jwt.sign({ userId: user.id.toString(), email: user.email }, JWT_SECRET, {
       expiresIn: JWT_REFRESH_EXPIRES_IN,
     });
 
     const refreshTokenExpiry = new Date();
     refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
 
-    await db.insert(refreshTokens).values({
-      id: uuidv4(),
-      userId: user.id,
-      token: refreshToken,
-      expiresAt: refreshTokenExpiry,
-    });
+    await execute(
+      "INSERT INTO sessions (user_id, token, refresh_token, expires_at, refresh_expires_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [user.id, accessToken, refreshToken, refreshTokenExpiry, refreshTokenExpiry, new Date()]
+    );
 
     logger.info(`User logged in: ${email}`);
 
@@ -178,31 +193,30 @@ router.post("/refresh", async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid refresh token" });
     }
 
-    const userResult = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
+    const user = await queryOne<User>(
+      "SELECT * FROM users WHERE id = ?",
+      [decoded.userId]
+    );
 
-    if (userResult.length === 0) {
+    if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
 
-    const user = userResult[0];
-
-    const newAccessToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, {
+    const newAccessToken = jwt.sign({ userId: user.id.toString(), email: user.email }, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN,
     });
 
-    const newRefreshToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, {
+    const newRefreshToken = jwt.sign({ userId: user.id.toString(), email: user.email }, JWT_SECRET, {
       expiresIn: JWT_REFRESH_EXPIRES_IN,
     });
 
     const refreshTokenExpiry = new Date();
     refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
 
-    await db.insert(refreshTokens).values({
-      id: uuidv4(),
-      userId: user.id,
-      token: newRefreshToken,
-      expiresAt: refreshTokenExpiry,
-    });
+    await execute(
+      "INSERT INTO sessions (user_id, token, refresh_token, expires_at, refresh_expires_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [user.id, newAccessToken, newRefreshToken, refreshTokenExpiry, refreshTokenExpiry, new Date()]
+    );
 
     res.json({
       tokens: {
@@ -234,13 +248,16 @@ router.get("/me", async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    const userResult = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
+    const user = await queryOne<User>(
+      "SELECT * FROM users WHERE id = ?",
+      [decoded.userId]
+    );
 
-    if (userResult.length === 0) {
+    if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json({ user: userResponse(userResult[0]) });
+    res.json({ user: userResponse(user) });
   } catch (err: any) {
     logger.error(err, "Auth me error");
     res.status(401).json({ message: "Unauthorized" });
@@ -257,8 +274,11 @@ router.post("/logout", async (req: Request, res: Response) => {
       let decoded: any;
       try {
         decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-        // Optional: delete refresh tokens for this user
-        // await db.delete(refreshTokens).where(eq(refreshTokens.userId, decoded.userId));
+        // Delete session for this user
+        await execute(
+          "DELETE FROM sessions WHERE user_id = ? AND token = ?",
+          [decoded.userId, token]
+        );
       } catch (err) {
         // Token is already invalid
       }
@@ -272,3 +292,4 @@ router.post("/logout", async (req: Request, res: Response) => {
 });
 
 export default router;
+

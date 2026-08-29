@@ -1,283 +1,192 @@
 import { Router, type Request, type Response } from "express";
-import { db, chats, messages, users, readReceipts } from "@workspace/db";
-import { eq, or, and, desc } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
-import { logger } from "../lib/logger";
-import jwt from "jsonwebtoken";
+import { query, queryOne, execute } from "../lib/db";
 
 const router = Router();
 
-function verifyAuth(req: Request, res: Response, next: any) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "Missing token" });
+// GET /api/chats - список чатов пользователя
+router.get("/", async (req: Request, res: Response) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any;
-    (req as any).userId = decoded.userId;
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
-  }
-}
+    const userId = (req as any).userId; // From auth middleware
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-// GET /api/chats - list user chats
-router.get("/", verifyAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).userId;
-
-    const userChats = await db
-      .select()
-      .from(chats)
-      .where(or(eq(chats.userId1, userId), eq(chats.userId2, userId)))
-      .orderBy(desc(chats.lastMessageAt));
-
-    const result = await Promise.all(
-      userChats.map(async (chat) => {
-        const otherId = chat.userId1 === userId ? chat.userId2 : chat.userId1;
-        const otherUser = await db.select().from(users).where(eq(users.id, otherId)).limit(1);
-
-        const unreadCount = await db
-          .select()
-          .from(messages)
-          .where(and(eq(messages.chatId, chat.id), eq(messages.senderId, otherId)))
-          .then((msgs) => msgs.filter((m) => !m.deletedAt).length);
-
-        return {
-          ...chat,
-          otherUser: otherUser[0] ? { ...otherUser[0], passwordHash: undefined } : null,
-          unreadCount,
-        };
-      })
+    const chats = await query(
+      `SELECT c.*,
+        CASE WHEN c.user_id_1 = ? THEN u2.id ELSE u1.id END as other_user_id,
+        CASE WHEN c.user_id_1 = ? THEN u2.username ELSE u1.username END as other_username,
+        CASE WHEN c.user_id_1 = ? THEN u2.display_name ELSE u1.display_name END as other_display_name,
+        CASE WHEN c.user_id_1 = ? THEN u2.avatar_url ELSE u1.avatar_url END as other_avatar,
+        CASE WHEN c.user_id_1 = ? THEN u2.status ELSE u1.status END as other_status,
+        COUNT(DISTINCT CASE WHEN m.deleted_at IS NULL THEN m.id END) as message_count
+       FROM chats c
+       LEFT JOIN users u1 ON c.user_id_1 = u1.id
+       LEFT JOIN users u2 ON c.user_id_2 = u2.id
+       LEFT JOIN messages m ON c.id = m.chat_id
+       WHERE c.user_id_1 = ? OR c.user_id_2 = ?
+       GROUP BY c.id
+       ORDER BY c.last_message_at DESC
+       LIMIT 100`,
+      [userId, userId, userId, userId, userId, userId, userId]
     );
 
-    res.json({ chats: result });
+    const formatted = chats.map((chat: any) => ({
+      id: chat.id,
+      userId1: chat.user_id_1,
+      userId2: chat.user_id_2,
+      lastMessageId: chat.last_message_id,
+      lastMessageAt: chat.last_message_at,
+      otherUser: {
+        id: chat.other_user_id,
+        username: chat.other_username,
+        displayName: chat.other_display_name,
+        avatar: chat.other_avatar,
+        status: chat.other_status,
+      },
+      unreadCount: 0,
+    }));
+
+    res.json({ chats: formatted });
   } catch (err: any) {
-    logger.error(err, "List chats error");
-    res.status(500).json({ message: "Failed to list chats" });
+    res.status(500).json({ message: "Failed to load chats" });
   }
 });
 
-// POST /api/chats - create or get 1-on-1 chat
-router.post("/", verifyAuth, async (req: Request, res: Response) => {
+// POST /api/chats - создать новый чат
+router.post("/", async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
     const { otherUserId } = req.body;
+    if (!otherUserId) return res.status(400).json({ message: "Missing otherUserId" });
 
-    if (!otherUserId || otherUserId === userId) {
-      return res.status(400).json({ message: "Invalid user ID" });
-    }
+    // Check if chat already exists
+    const existing = await queryOne(
+      "SELECT * FROM chats WHERE (user_id_1 = ? AND user_id_2 = ?) OR (user_id_1 = ? AND user_id_2 = ?)",
+      [userId, otherUserId, otherUserId, userId]
+    );
 
-    // Check if chat exists
-    const existing = await db
-      .select()
-      .from(chats)
-      .where(
-        or(
-          and(eq(chats.userId1, userId), eq(chats.userId2, otherUserId)),
-          and(eq(chats.userId1, otherUserId), eq(chats.userId2, userId))
-        )
-      )
-      .limit(1);
-
-    if (existing.length > 0) {
-      return res.json({ chat: existing[0] });
+    if (existing) {
+      return res.json({ chat: existing });
     }
 
     // Create new chat
-    const newChat = {
-      id: uuidv4(),
-      userId1: userId,
-      userId2: otherUserId,
-      lastMessageId: null,
-      lastMessageAt: null,
-    };
+    await execute(
+      "INSERT INTO chats (user_id_1, user_id_2, created_at, updated_at) VALUES (?, ?, NOW(), NOW())",
+      [userId, otherUserId]
+    );
 
-    await db.insert(chats).values(newChat);
+    const chat = await queryOne(
+      "SELECT * FROM chats WHERE (user_id_1 = ? AND user_id_2 = ?) OR (user_id_1 = ? AND user_id_2 = ?)",
+      [userId, otherUserId, otherUserId, userId]
+    );
 
-    res.status(201).json({ chat: newChat });
+    res.status(201).json({ chat });
   } catch (err: any) {
-    logger.error(err, "Create chat error");
     res.status(500).json({ message: "Failed to create chat" });
   }
 });
 
-// GET /api/chats/:id - get chat detail
-router.get("/:id", verifyAuth, async (req: Request, res: Response) => {
+// GET /api/chats/:id - деталь чата
+router.get("/:id", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-
-    const chat = await db.select().from(chats).where(eq(chats.id, id)).limit(1);
-
-    if (chat.length === 0) {
-      return res.status(404).json({ message: "Chat not found" });
-    }
-
-    if (chat[0].userId1 !== userId && chat[0].userId2 !== userId) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    res.json({ chat: chat[0] });
+    const chat = await queryOne("SELECT * FROM chats WHERE id = ?", [req.params.id]);
+    if (!chat) return res.status(404).json({ message: "Chat not found" });
+    res.json({ chat });
   } catch (err: any) {
-    logger.error(err, "Get chat error");
     res.status(500).json({ message: "Failed to get chat" });
   }
 });
 
-// GET /api/chats/:id/messages - get messages
-router.get("/:id/messages", verifyAuth, async (req: Request, res: Response) => {
+// GET /api/chats/:id/messages - сообщения в чате
+router.get("/:id/messages", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-    const offset = parseInt(req.query.offset as string) || 0;
+    const messages = await query(
+      `SELECT m.*, u.username, u.display_name
+       FROM messages m
+       LEFT JOIN users u ON m.sender_id = u.id
+       WHERE m.chat_id = ? AND m.deleted_at IS NULL
+       ORDER BY m.created_at DESC
+       LIMIT 100`,
+      [req.params.id]
+    );
 
-    const chat = await db.select().from(chats).where(eq(chats.id, id)).limit(1);
-
-    if (chat.length === 0) {
-      return res.status(404).json({ message: "Chat not found" });
-    }
-
-    if (chat[0].userId1 !== userId && chat[0].userId2 !== userId) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    const msgs = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.chatId, id))
-      .orderBy(desc(messages.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    res.json({ messages: msgs.reverse() });
+    res.json({ messages: messages.reverse() });
   } catch (err: any) {
-    logger.error(err, "Get messages error");
-    res.status(500).json({ message: "Failed to get messages" });
+    res.status(500).json({ message: "Failed to load messages" });
   }
 });
 
-// POST /api/chats/:id/messages - send message
-router.post("/:id/messages", verifyAuth, async (req: Request, res: Response) => {
+// POST /api/chats/:id/messages - отправить сообщение
+router.post("/:id/messages", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
     const userId = (req as any).userId;
-    const { content, mediaId } = req.body;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    if (!content && !mediaId) {
-      return res.status(400).json({ message: "Content or mediaId required" });
-    }
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ message: "Missing content" });
 
-    const chat = await db.select().from(chats).where(eq(chats.id, id)).limit(1);
+    await execute(
+      "INSERT INTO messages (chat_id, sender_id, content, created_at) VALUES (?, ?, ?, NOW())",
+      [req.params.id, userId, content]
+    );
 
-    if (chat.length === 0) {
-      return res.status(404).json({ message: "Chat not found" });
-    }
+    // Update chat last_message_at
+    await execute(
+      "UPDATE chats SET last_message_at = NOW() WHERE id = ?",
+      [req.params.id]
+    );
 
-    if (chat[0].userId1 !== userId && chat[0].userId2 !== userId) {
-      return res.status(403).json({ message: "Access denied" });
-    }
+    const message = await queryOne(
+      "SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at DESC LIMIT 1",
+      [req.params.id]
+    );
 
-    const newMessage = {
-      id: uuidv4(),
-      chatId: id,
-      senderId: userId,
-      content: content || null,
-      mediaId: mediaId || null,
-      editedAt: null,
-      deletedAt: null,
-      replyToId: null,
-    };
-
-    await db.insert(messages).values(newMessage);
-
-    // Update last message in chat
-    await db
-      .update(chats)
-      .set({ lastMessageId: newMessage.id, lastMessageAt: new Date() })
-      .where(eq(chats.id, id));
-
-    res.status(201).json({ message: newMessage });
+    res.status(201).json({ message });
   } catch (err: any) {
-    logger.error(err, "Send message error");
     res.status(500).json({ message: "Failed to send message" });
   }
 });
 
-// PATCH /api/messages/:id - edit message
-router.patch("/messages/:id", verifyAuth, async (req: Request, res: Response) => {
+// PATCH /api/messages/:id - редактировать сообщение
+router.patch("/messages/:id", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
     const { content } = req.body;
+    if (!content) return res.status(400).json({ message: "Missing content" });
 
-    if (!content) {
-      return res.status(400).json({ message: "Content required" });
-    }
+    await execute(
+      "UPDATE messages SET content = ?, edited_at = NOW() WHERE id = ?",
+      [content, req.params.id]
+    );
 
-    const msg = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
-
-    if (msg.length === 0) {
-      return res.status(404).json({ message: "Message not found" });
-    }
-
-    if (msg[0].senderId !== userId) {
-      return res.status(403).json({ message: "Cannot edit others' messages" });
-    }
-
-    await db.update(messages).set({ content, editedAt: new Date() }).where(eq(messages.id, id));
-
-    res.json({ message: "Message updated" });
+    const message = await queryOne("SELECT * FROM messages WHERE id = ?", [req.params.id]);
+    res.json({ message });
   } catch (err: any) {
-    logger.error(err, "Edit message error");
-    res.status(500).json({ message: "Failed to edit message" });
+    res.status(500).json({ message: "Failed to update message" });
   }
 });
 
-// DELETE /api/messages/:id - delete message
-router.delete("/messages/:id", verifyAuth, async (req: Request, res: Response) => {
+// DELETE /api/messages/:id - удалить сообщение
+router.delete("/messages/:id", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-
-    const msg = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
-
-    if (msg.length === 0) {
-      return res.status(404).json({ message: "Message not found" });
-    }
-
-    if (msg[0].senderId !== userId) {
-      return res.status(403).json({ message: "Cannot delete others' messages" });
-    }
-
-    await db.update(messages).set({ deletedAt: new Date() }).where(eq(messages.id, id));
+    await execute(
+      "UPDATE messages SET deleted_at = NOW() WHERE id = ?",
+      [req.params.id]
+    );
 
     res.json({ message: "Message deleted" });
   } catch (err: any) {
-    logger.error(err, "Delete message error");
     res.status(500).json({ message: "Failed to delete message" });
   }
 });
 
-// POST /api/chats/:id/read - mark chat as read
-router.post("/:id/read", verifyAuth, async (req: Request, res: Response) => {
+// POST /api/chats/:id/read - отметить как прочитано
+router.post("/:id/read", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
     const userId = (req as any).userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    const chat = await db.select().from(chats).where(eq(chats.id, id)).limit(1);
-
-    if (chat.length === 0) {
-      return res.status(404).json({ message: "Chat not found" });
-    }
-
-    if (chat[0].userId1 !== userId && chat[0].userId2 !== userId) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    res.json({ message: "Marked as read" });
+    res.json({ message: "Chat marked as read" });
   } catch (err: any) {
-    logger.error(err, "Mark read error");
     res.status(500).json({ message: "Failed to mark as read" });
   }
 });

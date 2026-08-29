@@ -1,360 +1,163 @@
 import { Router, type Request, type Response } from "express";
-import { db, groups, groupMembers, groupMessages, users } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
-import { logger } from "../lib/logger";
-import jwt from "jsonwebtoken";
+import { query, queryOne, execute } from "../lib/db";
 
 const router = Router();
 
-function verifyAuth(req: Request, res: Response, next: any) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "Missing token" });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as any;
-    (req as any).userId = decoded.userId;
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
-  }
-}
-
-// GET /api/groups - list user groups
-router.get("/", verifyAuth, async (req: Request, res: Response) => {
+// GET /api/groups - список групп пользователя
+router.get("/", async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    const userGroups = await db
-      .select()
-      .from(groupMembers)
-      .where(eq(groupMembers.userId, userId));
+    const groups = await query(
+      `SELECT g.*, COUNT(DISTINCT gm.user_id) as member_count
+       FROM groups g
+       LEFT JOIN group_members gm ON g.id = gm.group_id
+       WHERE g.owner_id = ? OR g.id IN (SELECT group_id FROM group_members WHERE user_id = ?)
+       GROUP BY g.id
+       ORDER BY g.created_at DESC
+       LIMIT 100`,
+      [userId, userId]
+    );
 
-    const groupIds = userGroups.map((gm) => gm.groupId);
-
-    if (groupIds.length === 0) {
-      return res.json({ groups: [] });
-    }
-
-    const groupList = await db
-      .select()
-      .from(groups)
-      .where(eq(groups.id, groupIds[0]))
-      .then(async (gs) => {
-        // Fetch all groups
-        const result = [];
-        for (const groupId of groupIds) {
-          const g = await db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
-          if (g.length > 0) result.push(g[0]);
-        }
-        return result;
-      });
-
-    res.json({ groups: groupList });
+    res.json({ groups });
   } catch (err: any) {
-    logger.error(err, "List groups error");
-    res.status(500).json({ message: "Failed to list groups" });
+    res.status(500).json({ message: "Failed to load groups" });
   }
 });
 
-// POST /api/groups - create group
-router.post("/", verifyAuth, async (req: Request, res: Response) => {
+// POST /api/groups - создать группу
+router.post("/", async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
-    const { name, description, avatar, isPublic } = req.body;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    if (!name) {
-      return res.status(400).json({ message: "Group name required" });
-    }
+    const { name, description, isPublic } = req.body;
+    if (!name) return res.status(400).json({ message: "Missing name" });
 
-    const groupId = uuidv4();
+    await execute(
+      "INSERT INTO groups (name, description, owner_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())",
+      [name, description || null, userId, isPublic || false]
+    );
 
-    const newGroup = {
-      id: groupId,
-      name,
-      description: description || null,
-      avatar: avatar || null,
-      ownerId: userId,
-      isPublic: isPublic || false,
-    };
+    const group = await queryOne(
+      "SELECT * FROM groups WHERE owner_id = ? ORDER BY created_at DESC LIMIT 1",
+      [userId]
+    );
 
-    await db.insert(groups).values(newGroup);
+    // Add owner as member
+    await execute(
+      "INSERT INTO group_members (group_id, user_id, role, joined_at) VALUES (?, ?, ?, NOW())",
+      [group.id, userId, "owner"]
+    );
 
-    // Add creator as member
-    await db.insert(groupMembers).values({
-      id: uuidv4(),
-      groupId,
-      userId,
-      role: "owner",
-    });
-
-    res.status(201).json({ group: newGroup });
+    res.status(201).json({ group });
   } catch (err: any) {
-    logger.error(err, "Create group error");
     res.status(500).json({ message: "Failed to create group" });
   }
 });
 
-// GET /api/groups/:id - get group detail
-router.get("/:id", verifyAuth, async (req: Request, res: Response) => {
+// GET /api/groups/:id - деталь группы
+router.get("/:id", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-
-    const group = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
-
-    if (group.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
-    // Check if user is member
-    const isMember = await db
-      .select()
-      .from(groupMembers)
-      .where(and(eq(groupMembers.groupId, id), eq(groupMembers.userId, userId)))
-      .limit(1);
-
-    if (!group[0].isPublic && isMember.length === 0) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    const members = await db
-      .select()
-      .from(groupMembers)
-      .where(eq(groupMembers.groupId, id));
-
-    res.json({ group: group[0], memberCount: members.length });
+    const group = await queryOne("SELECT * FROM groups WHERE id = ?", [req.params.id]);
+    if (!group) return res.status(404).json({ message: "Group not found" });
+    res.json({ group });
   } catch (err: any) {
-    logger.error(err, "Get group error");
     res.status(500).json({ message: "Failed to get group" });
   }
 });
 
-// GET /api/groups/:id/members - get group members
-router.get("/:id/members", verifyAuth, async (req: Request, res: Response) => {
+// GET /api/groups/:id/messages - сообщения в группе
+router.get("/:id/messages", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-
-    const group = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
-
-    if (group.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
-    const members = await db
-      .select()
-      .from(groupMembers)
-      .where(eq(groupMembers.groupId, id));
-
-    const memberDetails = await Promise.all(
-      members.map(async (m) => {
-        const user = await db.select().from(users).where(eq(users.id, m.userId)).limit(1);
-        return {
-          ...m,
-          user: user[0] ? { ...user[0], passwordHash: undefined } : null,
-        };
-      })
+    const messages = await query(
+      `SELECT gm.*, u.username, u.display_name
+       FROM group_messages gm
+       LEFT JOIN users u ON gm.sender_id = u.id
+       WHERE gm.group_id = ? AND gm.deleted_at IS NULL
+       ORDER BY gm.created_at DESC
+       LIMIT 100`,
+      [req.params.id]
     );
 
-    res.json({ members: memberDetails });
+    res.json({ messages: messages.reverse() });
   } catch (err: any) {
-    logger.error(err, "Get members error");
-    res.status(500).json({ message: "Failed to get members" });
+    res.status(500).json({ message: "Failed to load messages" });
   }
 });
 
-// PATCH /api/groups/:id - update group
-router.patch("/:id", verifyAuth, async (req: Request, res: Response) => {
+// POST /api/groups/:id/messages - отправить сообщение
+router.post("/:id/messages", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
     const userId = (req as any).userId;
-    const { name, description, avatar, isPublic } = req.body;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    const group = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ message: "Missing content" });
 
-    if (group.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
+    await execute(
+      "INSERT INTO group_messages (group_id, sender_id, content, created_at) VALUES (?, ?, ?, NOW())",
+      [req.params.id, userId, content]
+    );
 
-    if (group[0].ownerId !== userId) {
-      return res.status(403).json({ message: "Only owner can update group" });
-    }
+    const message = await queryOne(
+      "SELECT * FROM group_messages WHERE group_id = ? ORDER BY created_at DESC LIMIT 1",
+      [req.params.id]
+    );
 
-    const updates: any = {};
-    if (name !== undefined) updates.name = name;
-    if (description !== undefined) updates.description = description;
-    if (avatar !== undefined) updates.avatar = avatar;
-    if (isPublic !== undefined) updates.isPublic = isPublic;
-    updates.updatedAt = new Date();
-
-    await db.update(groups).set(updates).where(eq(groups.id, id));
-
-    res.json({ message: "Group updated" });
+    res.status(201).json({ message });
   } catch (err: any) {
-    logger.error(err, "Update group error");
-    res.status(500).json({ message: "Failed to update group" });
-  }
-});
-
-// POST /api/groups/:id/members - add member to group
-router.post("/:id/members", verifyAuth, async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-    const { newMemberId } = req.body;
-
-    if (!newMemberId) {
-      return res.status(400).json({ message: "New member ID required" });
-    }
-
-    const group = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
-
-    if (group.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
-    if (group[0].ownerId !== userId) {
-      return res.status(403).json({ message: "Only owner can add members" });
-    }
-
-    // Check if already member
-    const existing = await db
-      .select()
-      .from(groupMembers)
-      .where(and(eq(groupMembers.groupId, id), eq(groupMembers.userId, newMemberId)))
-      .limit(1);
-
-    if (existing.length > 0) {
-      return res.status(400).json({ message: "Already a member" });
-    }
-
-    await db.insert(groupMembers).values({
-      id: uuidv4(),
-      groupId: id,
-      userId: newMemberId,
-      role: "member",
-    });
-
-    res.status(201).json({ message: "Member added" });
-  } catch (err: any) {
-    logger.error(err, "Add member error");
-    res.status(500).json({ message: "Failed to add member" });
-  }
-});
-
-// DELETE /api/groups/:id/members/:memberId - remove member
-router.delete("/:id/members/:memberId", verifyAuth, async (req: Request, res: Response) => {
-  try {
-    const { id, memberId } = req.params;
-    const userId = (req as any).userId;
-
-    const group = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
-
-    if (group.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
-    if (group[0].ownerId !== userId && userId !== memberId) {
-      return res.status(403).json({ message: "Cannot remove member" });
-    }
-
-    await db
-      .delete(groupMembers)
-      .where(and(eq(groupMembers.groupId, id), eq(groupMembers.userId, memberId)));
-
-    res.json({ message: "Member removed" });
-  } catch (err: any) {
-    logger.error(err, "Remove member error");
-    res.status(500).json({ message: "Failed to remove member" });
-  }
-});
-
-// POST /api/groups/:id/messages - send message to group
-router.post("/:id/messages", verifyAuth, async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-    const { content, mediaId } = req.body;
-
-    if (!content && !mediaId) {
-      return res.status(400).json({ message: "Content or mediaId required" });
-    }
-
-    const group = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
-
-    if (group.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
-    // Check if user is member
-    const isMember = await db
-      .select()
-      .from(groupMembers)
-      .where(and(eq(groupMembers.groupId, id), eq(groupMembers.userId, userId)))
-      .limit(1);
-
-    if (isMember.length === 0) {
-      return res.status(403).json({ message: "Not a member" });
-    }
-
-    const newMessage = {
-      id: uuidv4(),
-      groupId: id,
-      senderId: userId,
-      content: content || null,
-      mediaId: mediaId || null,
-      editedAt: null,
-      deletedAt: null,
-      replyToId: null,
-    };
-
-    await db.insert(groupMessages).values(newMessage);
-
-    res.status(201).json({ message: newMessage });
-  } catch (err: any) {
-    logger.error(err, "Send group message error");
     res.status(500).json({ message: "Failed to send message" });
   }
 });
 
-// GET /api/groups/:id/messages - get group messages
-router.get("/:id/messages", verifyAuth, async (req: Request, res: Response) => {
+// GET /api/groups/:id/members - члены группы
+router.get("/:id/members", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).userId;
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-    const offset = parseInt(req.query.offset as string) || 0;
+    const members = await query(
+      `SELECT gm.*, u.username, u.display_name, u.avatar_url
+       FROM group_members gm
+       LEFT JOIN users u ON gm.user_id = u.id
+       WHERE gm.group_id = ?
+       ORDER BY gm.joined_at`,
+      [req.params.id]
+    );
 
-    const group = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
-
-    if (group.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
-    // Check if user is member or group is public
-    const isMember = await db
-      .select()
-      .from(groupMembers)
-      .where(and(eq(groupMembers.groupId, id), eq(groupMembers.userId, userId)))
-      .limit(1);
-
-    if (!group[0].isPublic && isMember.length === 0) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    const msgs = await db
-      .select()
-      .from(groupMessages)
-      .where(eq(groupMessages.groupId, id))
-      .orderBy(desc(groupMessages.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    res.json({ messages: msgs.reverse() });
+    res.json({ members });
   } catch (err: any) {
-    logger.error(err, "Get group messages error");
-    res.status(500).json({ message: "Failed to get messages" });
+    res.status(500).json({ message: "Failed to load members" });
+  }
+});
+
+// POST /api/groups/:id/members - добавить члена
+router.post("/:id/members", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ message: "Missing userId" });
+
+    await execute(
+      "INSERT INTO group_members (group_id, user_id, role, joined_at) VALUES (?, ?, ?, NOW())",
+      [req.params.id, userId, "member"]
+    );
+
+    res.status(201).json({ message: "Member added" });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to add member" });
+  }
+});
+
+// DELETE /api/groups/:id/members/:memberId - удалить члена
+router.delete("/:id/members/:memberId", async (req: Request, res: Response) => {
+  try {
+    await execute(
+      "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+      [req.params.id, req.params.memberId]
+    );
+
+    res.json({ message: "Member removed" });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to remove member" });
   }
 });
 

@@ -1,20 +1,22 @@
-import { Router, type IRouter } from "express";
-import healthRouter from "./health";
-import authRouter from "./auth";
-import usersRouter from "./users";
-import chatsRouter from "./chats";
-import groupsRouter from "./groups";
-import channelsRouter from "./channels";
-import adminRouter from "./admin";
+import { Router } from "express";
+import { authMiddleware } from "../lib/auth-middleware";
+import authRoutes from "./auth";
+import usersRoutes from "./users";
+import chatsRoutes from "./chats";
+import groupsRoutes from "./groups";
+import channelsRoutes from "./channels";
+import adminRoutes from "./admin";
 
-const router: IRouter = Router();
+const router = Router();
 
-router.use(healthRouter);
-router.use("/auth", authRouter);
-router.use("/users", usersRouter);
-router.use("/chats", chatsRouter);
-router.use("/groups", groupsRouter);
-router.use("/channels", channelsRouter);
-router.use("/admin", adminRouter);
+// Public routes (no auth needed)
+router.use("/auth", authRoutes);
+
+// Protected routes (auth required)
+router.use("/users", authMiddleware, usersRoutes);
+router.use("/chats", authMiddleware, chatsRoutes);
+router.use("/groups", authMiddleware, groupsRoutes);
+router.use("/channels", authMiddleware, channelsRoutes);
+router.use("/admin", authMiddleware, adminRoutes);
 
 export default router;
