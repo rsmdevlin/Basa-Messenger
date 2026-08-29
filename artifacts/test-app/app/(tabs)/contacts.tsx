@@ -1,18 +1,252 @@
-import React, { useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColors } from '@/hooks/useColors';
-import { useMessenger } from '@/context/MessengerContext';
-import { Avatar } from '@/components/Avatar';
-import { EmptyState } from '@/components/EmptyState';
+import { useAuth } from '@/context/AuthContext';
+import { COLORS } from '@/theme/cyberpunk';
+
+interface User {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatar: string | null;
+  status: string;
+  email: string;
+}
 
 export default function ContactsScreen() {
-  const colors = useColors(); const insets = useSafeAreaInsets(); const { users } = useMessenger(); const [query, setQuery] = useState('');
-  const contacts = useMemo(() => users.filter((user) => user.id !== 'me' && `${user.displayName} ${user.username}`.toLowerCase().includes(query.toLowerCase())), [users, query]);
-  return <View style={[styles.page, { backgroundColor: colors.background }]}>
-    <FlatList data={contacts} keyExtractor={(item) => item.id} contentContainerStyle={{ paddingTop: (Platform.OS === 'web' ? 67 : insets.top) + 18, paddingHorizontal: 20, paddingBottom: insets.bottom + 100 }} renderItem={({ item }) => <Pressable testID={`contact-${item.id}`} onPress={() => router.push(`/chat/${item.id}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}><Avatar name={item.displayName} tone={item.avatarTone} size={49} online={item.online} /><View style={styles.copy}><Text style={[styles.name, { color: colors.foreground }]}>{item.displayName}</Text><Text style={[styles.sub, { color: colors.mutedForeground }]}>@{item.username} <Text style={{ color: item.online ? colors.success : colors.mutedForeground }}>· {item.online ? 'online' : 'offline'}</Text></Text></View><Pressable testID={`start-chat-${item.id}`} onPress={() => router.push(`/chat/${item.id}`)} style={[styles.chatButton, { backgroundColor: colors.softLavender }]}><Feather name="message-circle" size={18} color={colors.accent} /></Pressable></Pressable>} ListHeaderComponent={<View><Text style={[styles.kicker, { color: colors.accent }]}>YOUR PEOPLE</Text><Text style={[styles.title, { color: colors.foreground }]}>Contacts</Text><View style={[styles.search, { backgroundColor: colors.card, borderColor: colors.border }]}><Feather name="search" size={18} color={colors.mutedForeground} /><TextInput testID="contacts-search" value={query} onChangeText={setQuery} placeholder="Find someone" placeholderTextColor={colors.mutedForeground} style={[styles.searchInput, { color: colors.foreground }]} /></View><Text style={[styles.count, { color: colors.mutedForeground }]}>{contacts.length} people</Text></View>} ListEmptyComponent={<EmptyState title="No one by that name" detail="Try a username or a softer spelling." icon="users" />} />
-  </View>;
+  const { user } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/users', {
+        headers: { Authorization: `Bearer ${(await useAuth()).token}` },
+      });
+      if (!res.ok) throw new Error('Failed to load users');
+      const data = await res.json();
+      setUsers(data.users?.filter((u: User) => u.id !== user?.id) || []);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = users.filter((u) =>
+    `${u.displayName || ''} ${u.username}`.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.kicker}>NETWORK</Text>
+          <Text style={styles.title}>Contacts</Text>
+        </View>
+      </View>
+
+      {/* Search */}
+      <View style={styles.searchContainer}>
+        <MaterialCommunityIcons name="magnify" size={20} color={COLORS.textSecondary} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search contacts..."
+          placeholderTextColor={COLORS.textSecondary}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <MaterialCommunityIcons name="close" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Users List */}
+      {loading ? (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.centerContent}>
+          <MaterialCommunityIcons name="account-multiple-outline" size={48} color={COLORS.textSecondary} />
+          <Text style={styles.emptyTitle}>
+            {search ? 'No users found' : 'No contacts yet'}
+          </Text>
+          <Text style={styles.emptyText}>
+            {search ? 'Try a different search' : 'Explore and add contacts'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.userCard}
+              onPress={() => router.push(`/chat/${item.id}`)}
+            >
+              <View style={styles.userAvatar}>
+                <MaterialCommunityIcons
+                  name="account-circle"
+                  size={40}
+                  color={COLORS.primary}
+                />
+                {item.status === 'online' && (
+                  <View style={styles.statusDot} />
+                )}
+              </View>
+              <View style={styles.userInfo}>
+                <Text style={styles.userName}>
+                  {item.displayName || item.username}
+                </Text>
+                <Text style={styles.userHandle}>@{item.username}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.chatButton}
+                onPress={() => router.push(`/chat/${item.id}`)}
+              >
+                <MaterialCommunityIcons name="message-outline" size={20} color={COLORS.primary} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          )}
+        />
+      )}
+    </SafeAreaView>
+  );
 }
-const styles = StyleSheet.create({ page: { flex: 1 }, kicker: { fontFamily: 'Inter_700Bold', letterSpacing: 2.4, fontSize: 11, marginBottom: 7 }, title: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -1, marginBottom: 22 }, search: { height: 48, borderWidth: 1, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 10 }, searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14 }, count: { fontFamily: 'Inter_500Medium', fontSize: 12, marginTop: 21, marginBottom: 5 }, row: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 12 }, pressed: { opacity: 0.65 }, copy: { flex: 1, gap: 5 }, name: { fontFamily: 'Inter_600SemiBold', fontSize: 16 }, sub: { fontFamily: 'Inter_400Regular', fontSize: 12 }, chatButton: { width: 38, height: 38, borderRadius: 14, alignItems: 'center', justifyContent: 'center' } });
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  kicker: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.secondary,
+    letterSpacing: 2,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 4,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    color: COLORS.text,
+    fontSize: 14,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  userCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 12,
+    marginBottom: 8,
+  },
+  userAvatar: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  statusDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.secondary,
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  userHandle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  chatButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+});

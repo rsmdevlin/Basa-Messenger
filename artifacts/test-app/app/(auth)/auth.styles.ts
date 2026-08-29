@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
+import { COLORS } from '@/theme/cyberpunk';
 
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#10121C',
+    backgroundColor: COLORS.background,
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 40,
@@ -15,27 +16,27 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#F7F3F0',
+    color: COLORS.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#999',
+    color: COLORS.textSecondary,
     marginBottom: 32,
   },
   input: {
-    backgroundColor: '#1A1D2E',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginBottom: 16,
-    color: '#F7F3F0',
+    color: COLORS.text,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#2A2D3E',
+    borderColor: COLORS.border,
   },
   button: {
-    backgroundColor: '#0066FF',
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
     paddingVertical: 14,
     marginTop: 8,
@@ -46,12 +47,12 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '600',
   },
   errorText: {
-    color: '#FF3B30',
+    color: COLORS.accent,
     fontSize: 14,
     marginBottom: 16,
   },
@@ -61,11 +62,11 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerText: {
-    color: '#999',
+    color: COLORS.textSecondary,
     fontSize: 14,
   },
   linkText: {
-    color: '#0066FF',
+    color: COLORS.primary,
     fontSize: 14,
     fontWeight: '600',
   },

@@ -1,44 +1,332 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { useColors } from '@/hooks/useColors';
-import { useMessenger } from '@/context/MessengerContext';
-import { ConversationHeader } from '@/components/ConversationHeader';
-import { MessageBubble } from '@/components/MessageBubble';
-import { MessageInput } from '@/components/MessageInput';
-import { Message } from '@/lib/models';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, router } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAuth } from '@/context/AuthContext';
+import { COLORS } from '@/theme/cyberpunk';
+
+interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  createdAt: string;
+  editedAt?: string;
+}
 
 export default function ChatScreen() {
-  const colors = useColors(); const insets = useSafeAreaInsets(); const { id } = useLocalSearchParams<{ id: string }>();
-  const { chats, messages, users, currentUser, addMessage, updateMessage, deleteMessage } = useMessenger();
-  const chat = chats.find((item) => item.id === id) ?? chats[0]; const other = users.find((user) => user.id === id) ?? users[1];
-  const [draft, setDraft] = useState(''); const [editing, setEditing] = useState<string | null>(null); const inputRef = useRef<TextInput>(null);
-  const items = useMemo(() => messages.filter((message) => message.chatId === id).slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt)).reverse(), [messages, id]);
-  const send = () => {
-    const body = draft.trim(); if (!body) return;
-    if (editing) { updateMessage(editing, { body, edited: true }); setEditing(null); } else addMessage({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, chatId: id ?? 'ines', senderId: currentUser.id, body, createdAt: new Date().toISOString(), read: true });
-    setDraft(''); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); inputRef.current?.focus();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [messageText, setMessageText] = useState('');
+  const [otherUser, setOtherUser] = useState<{ username: string; displayName: string | null } | null>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    loadMessages();
+    loadUserInfo();
+  }, [id]);
+
+  const loadMessages = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/chats/${id}/messages`, {
+        headers: { Authorization: `Bearer ${(await useAuth()).token}` },
+      });
+      if (!res.ok) throw new Error('Failed to load messages');
+      const data = await res.json();
+      setMessages(data.messages || []);
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+    } finally {
+      setLoading(false);
+    }
   };
-  const messageActions = (message: Message) => Alert.alert('Message', undefined, [
-    { text: 'Reply', onPress: () => setDraft(`Replying to: “${message.body}” `) },
-    { text: 'Copy', onPress: () => Alert.alert('Copied', 'Message copied to your clipboard.') },
-    ...(message.senderId === currentUser.id ? [{ text: 'Edit', onPress: () => { setEditing(message.id); setDraft(message.body); inputRef.current?.focus(); } }] : []),
-    { text: 'React', onPress: () => updateMessage(message.id, { reaction: message.reaction ? undefined : 'heart' }) },
-    { text: 'Forward', onPress: () => Alert.alert('Forward', 'Choose a conversation to forward this message.') },
-    { text: 'Delete', style: 'destructive' as const, onPress: () => deleteMessage(message.id) },
-    { text: 'Cancel', style: 'cancel' as const },
-  ]);
-  if (!chat || !other) return <View style={[styles.page, { backgroundColor: colors.background }]} />;
-  const messageDate = (value: string) => new Date(value).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
-  return <KeyboardAvoidingView style={[styles.page, { backgroundColor: colors.background }]} behavior="padding" keyboardVerticalOffset={0}>
-    <View style={{ paddingTop: Platform.OS === 'web' ? 67 : insets.top }}><ConversationHeader name={other.displayName} tone={other.avatarTone} online={other.online} /></View>
-    <FlatList inverted data={items} keyExtractor={(item) => item.id} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.messages} renderItem={({ item, index }) => <View>{index === 0 && <View style={styles.date}><Text style={[styles.dateText, { color: colors.mutedForeground }]}>{messageDate(item.createdAt)}</Text></View>}<MessageBubble message={item} own={item.senderId === currentUser.id} onLongPress={() => messageActions(item)} />{index === items.length - 1 && <View style={styles.startLabel}><Feather name="lock" size={12} color={colors.mutedForeground} /><Text style={[styles.startText, { color: colors.mutedForeground }]}>Messages are private between you two</Text></View>}</View>} ListHeaderComponent={<View style={[styles.unread, { backgroundColor: colors.softLavender }]}><Text style={[styles.unreadText, { color: colors.accent }]}>2 unread messages</Text></View>} ListEmptyComponent={<View style={styles.empty}><Feather name="sun" size={20} color={colors.accent} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>The first word is yours.</Text></View>} />
-    {editing && <View style={[styles.editing, { backgroundColor: colors.softLavender }]}><Text style={[styles.editingText, { color: colors.accent }]}>Editing message</Text><Pressable testID="cancel-edit" onPress={() => { setEditing(null); setDraft(''); }} hitSlop={10}><Feather name="x" size={16} color={colors.accent} /></Pressable></View>}
-    <View style={{ paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom }}><MessageInput value={draft} onChangeText={setDraft} onSend={send} inputRef={inputRef} onAttachment={() => Alert.alert('Coming soon', 'Attachments will be available in the next Basa stage.')} /></View>
-  </KeyboardAvoidingView>;
+
+  const loadUserInfo = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/users/${id}`, {
+        headers: { Authorization: `Bearer ${(await useAuth()).token}` },
+      });
+      if (!res.ok) throw new Error('Failed to load user');
+      const data = await res.json();
+      setOtherUser(data.user);
+    } catch (err) {
+      console.error('Failed to load user:', err);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!messageText.trim()) return;
+
+    const content = messageText;
+    setMessageText('');
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/chats/${id}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${(await useAuth()).token}`,
+        },
+        body: JSON.stringify({ content }),
+      });
+      if (res.ok) {
+        await loadMessages();
+        inputRef.current?.focus();
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      setMessageText(content);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <MaterialCommunityIcons name=”chevron-left” size={28} color={COLORS.primary} />
+        </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerName}>
+            {otherUser?.displayName || otherUser?.username}
+          </Text>
+          <Text style={styles.headerStatus}>Active now</Text>
+        </View>
+        <TouchableOpacity>
+          <MaterialCommunityIcons name=”information-outline” size={24} color={COLORS.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Messages */}
+      {loading ? (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size=”large” color={COLORS.primary} />
+        </View>
+      ) : messages.length === 0 ? (
+        <View style={styles.centerContent}>
+          <MaterialCommunityIcons name=”chat-outline” size={48} color={COLORS.textSecondary} />
+          <Text style={styles.emptyTitle}>No messages yet</Text>
+          <Text style={styles.emptyText}>Start a conversation</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={messages}
+          keyExtractor={(item) => item.id}
+          inverted
+          contentContainerStyle={styles.messagesList}
+          renderItem={({ item }) => (
+            <View
+              style={[
+                styles.messageBubble,
+                item.senderId === user?.id
+                  ? styles.messageBubbleOwn
+                  : styles.messageBubbleOther,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.messageText,
+                  item.senderId === user?.id
+                    ? styles.messageTextOwn
+                    : styles.messageTextOther,
+                ]}
+              >
+                {item.content}
+              </Text>
+              <Text style={styles.messageTime}>
+                {new Date(item.createdAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </Text>
+            </View>
+          )}
+        />
+      )}
+
+      {/* Input */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <View style={styles.inputContainer}>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              placeholder=”Type a message...”
+              placeholderTextColor={COLORS.textSecondary}
+              value={messageText}
+              onChangeText={setMessageText}
+              multiline
+            />
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={() => {
+                /* TODO: Add media picker */
+              }}
+            >
+              <MaterialCommunityIcons name=”plus” size={20} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              !messageText.trim() && styles.sendButtonDisabled,
+            ]}
+            onPress={sendMessage}
+            disabled={!messageText.trim()}
+          >
+            <MaterialCommunityIcons
+              name=”send”
+              size={20}
+              color={messageText.trim() ? COLORS.text : COLORS.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 }
-const styles = StyleSheet.create({ page: { flex: 1 }, messages: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 18 }, date: { alignItems: 'center', marginBottom: 14 }, dateText: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1.4 }, unread: { alignSelf: 'center', paddingHorizontal: 11, paddingVertical: 6, borderRadius: 14, marginBottom: 16 }, unreadText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 }, startLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 5, marginBottom: 8 }, startText: { fontFamily: 'Inter_400Regular', fontSize: 11 }, empty: { alignItems: 'center', justifyContent: 'center', transform: [{ scaleY: -1 }], paddingVertical: 80, gap: 10 }, emptyText: { fontFamily: 'Inter_400Regular', fontSize: 14 }, editing: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 9 }, editingText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 } });
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: 12,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  headerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  headerStatus: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  messageBubble: {
+    maxWidth: '85%',
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  messageBubbleOwn: {
+    alignSelf: 'flex-end',
+    backgroundColor: COLORS.primary,
+  },
+  messageBubbleOther: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  messageText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  messageTextOwn: {
+    color: COLORS.text,
+  },
+  messageTextOther: {
+    color: COLORS.text,
+  },
+  messageTime: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  input: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    paddingVertical: 10,
+    maxHeight: 100,
+  },
+  attachButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+});
