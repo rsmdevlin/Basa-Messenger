@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { verifyConnection } from "@workspace/db";
+import { getPool } from "./lib/db";
 
 const app: Express = express();
 
@@ -48,14 +48,12 @@ app.get("/health", (req, res) => {
 // Initialize database connection
 export async function initializeApp() {
   try {
-    const connected = await verifyConnection();
-    if (!connected) {
-      logger.error("Failed to connect to database");
-      process.exit(1);
-    }
-    logger.info("✅ Database initialized successfully");
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    connection.release();
+    logger.info("✅ Database connection verified");
   } catch (error) {
-    logger.error(error, "Failed to initialize app");
+    logger.error(error, "Failed to connect to database");
     process.exit(1);
   }
 }
