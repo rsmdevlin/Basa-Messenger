@@ -39,7 +39,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), routes: "mounted" });
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    version: "2026-08-29T22:55:00Z",
+    routes: "mounted"
+  });
 });
 
 // Test endpoint to verify routing works
