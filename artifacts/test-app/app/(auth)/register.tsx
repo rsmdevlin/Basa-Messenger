@@ -45,8 +45,9 @@ export default function RegisterScreen() {
       await register(email, password, username);
       router.replace('/(tabs)');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
-      Alert.alert('Registration Error', error || 'Please try again');
+      const errorMsg = err instanceof Error ? err.message : 'Registration failed';
+      setError(errorMsg);
+      Alert.alert('Registration Error', errorMsg);
     }
   };
 
