@@ -28,7 +28,7 @@ interface Channel {
 }
 
 export default function ChannelsScreen() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -36,12 +36,12 @@ export default function ChannelsScreen() {
 
   useEffect(() => {
     loadChannels();
-  }, []);
+  }, [token]);
 
   const loadChannels = async () => {
     try {
       const res = await fetch('https://basa-messenger.onrender.com/api/channels', {
-        headers: { Authorization: `Bearer ${(await useAuth()).token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to load channels');
       const data = await res.json();

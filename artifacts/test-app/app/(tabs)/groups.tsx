@@ -26,7 +26,7 @@ interface Group {
 }
 
 export default function GroupsScreen() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,12 +34,12 @@ export default function GroupsScreen() {
 
   useEffect(() => {
     loadGroups();
-  }, []);
+  }, [token]);
 
   const loadGroups = async () => {
     try {
       const res = await fetch('https://basa-messenger.onrender.com/api/groups', {
-        headers: { Authorization: `Bearer ${(await useAuth()).token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to load groups');
       const data = await res.json();
