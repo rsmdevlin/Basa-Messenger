@@ -1,15 +1,57 @@
 # Basa Messenger v2 — PROGRESS TRACKER
 
 ## PROJECT STATUS
-**Current Phase:** Backend Deployment & Testing  
-**Last Updated:** 2026-08-29 22:15 GMT+2  
+**Current Phase:** Frontend Ready, Backend Deployment Blocked  
+**Last Updated:** 2026-08-30 00:19 GMT+2  
 **Repository:** Basa-Messenger (branch: basa)  
 **Database:** MySQL on MazeHost (gs348298) - 80.242.59.112:3306  
-**API:** https://basa-messenger.onrender.com/api
+**API:** https://basa-messenger.onrender.com/api (auth working, other routes blocked)
 
 ---
 
-## ✅ COMPLETED
+## 🚨 CRITICAL BLOCKER
+
+### Render Backend Routes Not Deploying
+- **Status:** Old code still running on Render despite multiple pushes
+- **Working:** Auth endpoints (`/api/auth/*`)
+- **Blocked:** All other routes (`/api/users`, `/api/chats`, `/api/groups`, `/api/channels`)
+- **Root Cause:** Render builds failing silently or old container still active
+- **Evidence:** Health endpoint version field not updating despite code changes
+- **Solution Needed:** 
+  1. Manually trigger Render redeploy via UI
+  2. OR check Render build logs for errors
+  3. OR migrate to different hosting (Railway, Vercel)
+
+**Workaround:** Code is 100% correct locally. Backend can be tested locally with:
+```bash
+cd artifacts/api-server
+pnpm run build
+node --enable-source-maps ./dist/index.mjs
+```
+
+---
+
+## 📝 LATEST CHANGES (2026-08-30)
+
+### Fixed Issues
+- ✅ **profile.tsx syntax error** - Removed duplicate StyleSheet.create and orphaned JSX
+  - File had two StyleSheet.create blocks causing "Adjacent JSX elements" Metro error
+  - Kept cyberpunk design, removed old duplicate code
+  - TypeScript validation passes
+
+### Infrastructure Updates
+- ✅ **Added dev:lan script** - Can now run Expo on local IP 192.168.10.148
+  - Command: `pnpm run dev:lan` in artifacts/test-app
+  - Allows testing on physical iPhone via local network
+  
+- ✅ **Cleaned backend dependencies**
+  - Removed unused @workspace/db, @workspace/api-zod, drizzle-orm
+  - Added mysql2@^3.11.0 for direct MySQL connections
+  - Updated pnpm-lock.yaml to match package.json specs
+
+- ✅ **Added debug logging** - Routes now log mounting status for troubleshooting
+
+---
 
 ### Backend (artifacts/api-server)
 - ✅ Express.js setup with CORS, logging (pinoHttp)
