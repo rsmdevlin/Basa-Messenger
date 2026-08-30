@@ -17,7 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/theme/cyberpunk';
 
 export default function CreateGroupScreen() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
@@ -32,7 +32,7 @@ export default function CreateGroupScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${(await useAuth()).token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: name.trim(),

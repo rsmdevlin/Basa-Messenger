@@ -17,7 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/theme/cyberpunk';
 
 export default function CreateChannelScreen() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [description, setDescription] = useState('');
@@ -33,7 +33,7 @@ export default function CreateChannelScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${(await useAuth()).token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: name.trim(),
