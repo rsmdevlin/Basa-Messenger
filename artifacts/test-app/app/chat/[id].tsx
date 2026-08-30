@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,12 +9,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useAuth } from '@/context/AuthContext';
-import { COLORS } from '@/theme/cyberpunk';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useLocalSearchParams, router } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useAuth } from "@/context/AuthContext";
+import { COLORS } from "@/theme/cyberpunk";
 
 interface Message {
   id: string;
@@ -29,7 +29,7 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const [messageText, setMessageText] = useState('');
+  const [messageText, setMessageText] = useState("");
   const [otherUser, setOtherUser] = useState<{ username: string; displayName: string | null } | null>(null);
   const inputRef = useRef<TextInput>(null);
 
@@ -43,11 +43,11 @@ export default function ChatScreen() {
       const res = await fetch(`https://basa-messenger.onrender.com/api/chats/${id}/messages`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
-      if (!res.ok) throw new Error('Failed to load messages');
+      if (!res.ok) throw new Error("Failed to load messages");
       const data = await res.json();
       setMessages(data.messages || []);
     } catch (err) {
-      console.error('Failed to load messages:', err);
+      console.error("Failed to load messages:", err);
     } finally {
       setLoading(false);
     }
@@ -58,11 +58,11 @@ export default function ChatScreen() {
       const res = await fetch(`https://basa-messenger.onrender.com/api/users/${id}`, {
         headers: { Authorization: `Bearer ${(await useAuth()).token}` },
       });
-      if (!res.ok) throw new Error('Failed to load user');
+      if (!res.ok) throw new Error("Failed to load user");
       const data = await res.json();
       setOtherUser(data.user);
     } catch (err) {
-      console.error('Failed to load user:', err);
+      console.error("Failed to load user:", err);
     }
   };
 
@@ -70,13 +70,13 @@ export default function ChatScreen() {
     if (!messageText.trim()) return;
 
     const content = messageText;
-    setMessageText('');
+    setMessageText("");
 
     try {
       const res = await fetch(`https://basa-messenger.onrender.com/api/chats/${id}/messages`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${(await useAuth()).token}`,
         },
         body: JSON.stringify({ content }),
@@ -86,17 +86,17 @@ export default function ChatScreen() {
         inputRef.current?.focus();
       }
     } catch (err) {
-      console.error('Failed to send message:', err);
+      console.error("Failed to send message:", err);
       setMessageText(content);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={["bottom"]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <MaterialCommunityIcons name=”chevron-left” size={28} color={COLORS.primary} />
+          <MaterialCommunityIcons name="chevron-left" size={28} color={COLORS.primary} />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerName}>
@@ -105,18 +105,18 @@ export default function ChatScreen() {
           <Text style={styles.headerStatus}>Active now</Text>
         </View>
         <TouchableOpacity>
-          <MaterialCommunityIcons name=”information-outline” size={24} color={COLORS.textSecondary} />
+          <MaterialCommunityIcons name="information-outline" size={24} color={COLORS.textSecondary} />
         </TouchableOpacity>
       </View>
 
       {/* Messages */}
       {loading ? (
         <View style={styles.centerContent}>
-          <ActivityIndicator size=”large” color={COLORS.primary} />
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : messages.length === 0 ? (
         <View style={styles.centerContent}>
-          <MaterialCommunityIcons name=”chat-outline” size={48} color={COLORS.textSecondary} />
+          <MaterialCommunityIcons name="chat-outline" size={48} color={COLORS.textSecondary} />
           <Text style={styles.emptyTitle}>No messages yet</Text>
           <Text style={styles.emptyText}>Start a conversation</Text>
         </View>
@@ -147,8 +147,8 @@ export default function ChatScreen() {
               </Text>
               <Text style={styles.messageTime}>
                 {new Date(item.createdAt).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
+                  hour: "2-digit",
+                  minute: "2-digit",
                 })}
               </Text>
             </View>
@@ -158,15 +158,15 @@ export default function ChatScreen() {
 
       {/* Input */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
         <View style={styles.inputContainer}>
           <View style={styles.inputWrapper}>
             <TextInput
               ref={inputRef}
               style={styles.input}
-              placeholder=”Type a message...”
+              placeholder="Type a message..."
               placeholderTextColor={COLORS.textSecondary}
               value={messageText}
               onChangeText={setMessageText}
@@ -178,7 +178,7 @@ export default function ChatScreen() {
                 /* TODO: Add media picker */
               }}
             >
-              <MaterialCommunityIcons name=”plus” size={20} color={COLORS.primary} />
+              <MaterialCommunityIcons name="plus" size={20} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -190,7 +190,7 @@ export default function ChatScreen() {
             disabled={!messageText.trim()}
           >
             <MaterialCommunityIcons
-              name=”send”
+              name="send"
               size={20}
               color={messageText.trim() ? COLORS.text : COLORS.textSecondary}
             />
@@ -207,8 +207,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   },
   headerName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
   },
   headerStatus: {
@@ -230,40 +230,40 @@ const styles = StyleSheet.create({
   },
   centerContent: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 32,
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
     marginTop: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptyText: {
     fontSize: 14,
     color: COLORS.textSecondary,
     marginTop: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   messagesList: {
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
   messageBubble: {
-    maxWidth: '85%',
+    maxWidth: "85%",
     marginBottom: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
   },
   messageBubbleOwn: {
-    alignSelf: 'flex-end',
+    alignSelf: "flex-end",
     backgroundColor: COLORS.primary,
   },
   messageBubbleOther: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
@@ -294,8 +294,8 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
@@ -315,16 +315,16 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 6,
     backgroundColor: COLORS.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendButtonDisabled: {
     opacity: 0.5,
